@@ -1,0 +1,5 @@
+Python==3.11.0
+pandas==1.5.3
+PyMySQL==1.0.2
+SQLAlchemy==1.4.44
+
