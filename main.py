@@ -1,8 +1,6 @@
 # ALUMNO: BRYAN TICONA
-# OBS: PARA TESTEAR EL PROYECTO SE EMPLEO EL ARCHIVO data.ope QUE SE EMPLEO PARA EL
+# OBS: PARA TESTEAR EL PROYECTO SE EMPLEO EL ARCHIVO deuda_df.ope QUE SE EMPLEO PARA EL
 # LABORATORIO, SE LO RENOMBRO A file.ope.
-# ESTE ARCHIVO NO POSEE LOS DATOS NECESARIOS PARA EL PROYECTO, POR LO CUAL EL RESULTADO
-# ES UNA TABLA Y DOS ARCHIVOS CSV SIN DATOS PERO CON LOS ENCABEZADOS SOLICITADOS.
 
 # Importar librerías a utilizar
 import pandas as pd
@@ -13,7 +11,6 @@ input_folder = "server_inputs/"
 output_folder = "server_outputs/"
 input_file = "file.ope"
 sqlite_db_path = "database/deudas_sbs.sqlite"
-# file_path = input_folder + input_file
 
 # EXTRACT///////////////////////////////////////////////////////////////////////////////
 # Definir función EXTRACT
@@ -21,85 +18,122 @@ sqlite_db_path = "database/deudas_sbs.sqlite"
 
 def extract():
     file_path = input_folder + input_file
-    data = pd.read_csv(file_path)
-    print('==> (Extract) Los datos fueron extraidos')
-    return data
+    df = pd.read_csv(file_path)
+    print('==> (EXTRACT) Los datos fueron extraidos')
+    return df
 
 # TRANSFORM/////////////////////////////////////////////////////////////////////////////
-# Definir función TRANSFORM
+# Definir función TRANSFORM para deuda y cliente
+
+# DEUDA/////////////////////////////////////////////////////////////////////////////////
 
 
-def transform(data):
-    cliente_data = []
-    deuda_data = []
+def transform_deuda(df):
 
-    for line in data:
-        if line.startswith('1'):
-            fields = line.strip().split('|')
-            cliente_data.append(fields)
-        elif line.startswith('2'):
-            codigo_sbs = line[0:10]
-            codigo_empresa = line[10:15]
-            tipo_credito = line[15:17]
-            nivel2 = line[17:19]
-            moneda = line[19]
-            sub_codigo_cuenta = line[20:31]
-            condicion = line[31:37]
-            valor_saldo = line[37:41]
-            clasificacion_deuda = line[41]
-            codigo_cuenta = nivel2 + moneda + sub_codigo_cuenta
+    df['Value'] = df['Field_1'].str[0]
+    deuda_df = df[df['Value'] == '2'].reset_index(drop=True).copy()
 
-            deuda_data.append([
-                codigo_sbs, codigo_empresa, tipo_credito, nivel2, moneda,
-                condicion, valor_saldo, clasificacion_deuda, codigo_cuenta
-            ])
+    # Generando campos
+    deuda_df['CodigoSBS'] = deuda_df['Field_1'].str[1:11]
+    deuda_df['CodigoEmpresa'] = deuda_df['Field_1'].str[11:15]
+    deuda_df['TipoCredito'] = deuda_df['Field_1'].str[16:17]
+    deuda_df['Nivel2'] = deuda_df['Field_1'].str[18:19]
+    deuda_df['Moneda'] = deuda_df['Field_1'].str[20]
+    deuda_df['SubCodigoCuenta'] = deuda_df['Field_1'].str[21:31]
+    deuda_df['Condicion'] = deuda_df['Field_1'].str[32:37]
+    deuda_df['ValorSaldo'] = deuda_df['Field_1'].str[38:41]
+    deuda_df['ClasificacionDeuda'] = deuda_df['Field_1'].str[42]
+    deuda_df['CodigoCuenta'] = (
+        deuda_df['Nivel2'] +
+        deuda_df['Moneda'] +
+        deuda_df['SubCodigoCuenta']
+    )
 
-    # Cabeceras del dataframe cliente
-    cliente_columns = [
-        'SBSCodigoCliente', 'SBSFechaReporte', 'SBSTipoDocumentoT', 'SBSRucCliente',
-        'SBSTipoDocumento', 'SBSNumeroDocumento', 'SBSTipoPer', 'SBSTipoEmpresa',
-        'SBSNumeroEntidad', 'SBSSalNor', 'SBSSalCPP', 'SBSSalDEF', 'SBSSalDUD',
-        'SBSSalAPER', 'SBSAPEPAT', 'SBSAPEMAT', 'SBSAPECAS', 'SBSNOMCLI', 'SBSNOMCLI2'
-    ]
+    # Conversion de formatos
+    deuda_df['CodigoSBS'] = deuda_df['CodigoSBS'].astype('float')
 
-    # DataFrame cliente:
-    cliente_df = pd.DataFrame(cliente_data, columns=cliente_columns)
+    # Eliminando columnas innecesarias
+    deuda_df.drop('Field_1', axis=1, inplace=True)
+    deuda_df.drop('Value', axis=1, inplace=True)
+    deuda_df.drop('SubCodigoCuenta', axis=1, inplace=True)
 
-    # Cabeceras del dataframe deuda (se renombro los campos ‘CodigoSBS' —> 'Cod_SBS',
+    # Cabeceras del dataframe deuda (se renombro los campos 'CodigoSBS' —> 'Cod_SBS',
     # 'CodigoEmpresa'—> 'Cod_Emp','TipoCredito'—> 'Tip_Credit',
     # 'ValorSaldo'—> 'Val_Saldo', 'ClasificacionDeuda'—> 'Clasif_Deu',
     # 'CodigoCuenta'—> 'Cod_Cuenta')
+    deuda_columns = {
+        'CodigoSBS': 'Cod_SBS',
+        'CodigoEmpresa': 'Cod_Emp',
+        'TipoCredito': 'Tip_Credit',
+        'ValorSaldo': 'Val_Saldo',
+        'ClasificacionDeuda': 'Clasif_Deu',
+        'CodigoCuenta': 'Cod_Cuenta'
+    }
+    deuda_df.rename(columns=deuda_columns, inplace=True)
+    print('==> (TRANSFORM)(DEUDA) Los datos fueron transformados')
+    return deuda_df
 
-    deuda_columns = [
-        'Cod_SBS', 'Cod_Emp', 'Tip_Credit', 'Nivel2', 'Moneda', 'Condicion',
-        'Val_Saldo', 'Clasif_Deu', 'Cod_Cuenta'
-    ]
+# CLIENTE///////////////////////////////////////////////////////////////////////////////
 
-    # DataFrame deuda
-    deuda_df = pd.DataFrame(deuda_data, columns=deuda_columns)
 
-    print('==> (Transform) Los datos fueron transformados')
+def transform_cliente(df):
 
-    return cliente_df, deuda_df
+    df['Value'] = df['Field_1'].str[0]
+    cliente = df[df['Value'] == '1'].reset_index(drop=True).copy()
+
+    # Cabeceras del dataframe cliente
+    cliente_columns = {
+        0: 'SBSCodigoCliente',
+        1: 'SBSFechaReporte',
+        2: 'SBSTipoDocumentoT',
+        3: 'SBSRucCliente',
+        4: 'SBSTipoDocumento',
+        5: 'SBSNumeroDocumento',
+        6: 'SBSTipoPer',
+        7: 'SBSTipoEmpresa',
+        8: 'SBSNumeroEntidad',
+        9: 'SBSSalNor',
+        10: 'SBSSalCPP',
+        11: 'SBSSalDEF',
+        12: 'SBSSalDUD',
+        13: 'SBSSalAPER',
+        14: 'SBSAPEPAT',
+        15: 'SBSAPEMAT',
+        16: 'SBSAPECAS',
+        17: 'SBSNOMCLI',
+        18: 'SBSNOMCLI2'
+    }
+    # Dividiendo el campo field_1 en 19 columnas:
+    cliente_df = cliente['Field_1'].str.split('|', n=18, expand=True)
+
+    # Renombrando las cabeceras del dataframe cliente
+    cliente_df.rename(columns=cliente_columns, inplace=True)
+    print('==> (TRANSFORM)(CLIENTE) Los datos fueron transformados')
+
+    return cliente_df
 
 # LOAD//////////////////////////////////////////////////////////////////////////////////
-# Definir función Load
+# Definir función Load para cliente y deuda
+
+# CLIENTE///////////////////////////////////////////////////////////////////////////////
 
 
-def load(cliente_df, deuda_df):
+def load_cliente(cliente_df):
 
-    # Guardar DataFrames en archivos CSV
+    # Guardar dataframe cliente en un archivo csv
     cliente_df.to_csv(output_folder + "cliente.csv", index=False, sep='|')
+    print('==> (LOAD)(CLIENTE) El archivo cliente.csv fue creado satisfactoriamente')
+
+# DEUDA/////////////////////////////////////////////////////////////////////////////////
+
+
+def load_deuda(deuda_df):
+
+    # Guardar dataframe deuda en un archivos csv
     deuda_df.to_csv(output_folder + "deuda.csv", index=False, sep='|')
+    print('==> (LOAD)(DEUDA) El archivo deuda.csv fue creado satisfactoriamente')
 
-    # Eliminar campos no deseados del DataFrame deuda_df
-    # ('Field_1', 'Value', 'SubCodigoCuenta')
-    # deuda_df = deuda_df.drop(columns=['Field_1', 'Value', 'SubCodigoCuenta'])
-    # OBS: EN EL ARCHIVO .OPE QUE SE ESTA UTILIZANDO PARA EL TEST NO EXISTEN LOS CAMPOS
-    # QUE SE DESEA ELIMINAR POR ESA RAZON SE COMENTO ESTA PARTE DEL CODIGO PARA NO
-    # RECIBIR ERRORES
-
-    # Guardar Deudas en la base de datos SQLite utilizando SQLAlchemy
+    # Guardar dataframe deuda en la base de datos SQLite utilizando SQLAlchemy
     db_engine = sqlalchemy.create_engine('sqlite:///' + sqlite_db_path)
 
     # Crear la tabla deudas_sbs
@@ -119,22 +153,26 @@ def load(cliente_df, deuda_df):
         '''
         sql_query = sqlalchemy.sql.text(sql_query)
         con.execute(sql_query)
-        print('==> (LOAD) La tabla fue creada satisfactoriamente')
+        print('==> (LOAD) La tabla deudas_sbs fue creada satisfactoriamente')
 
     # Insertar los datos en la tabla deudas_sbs
     deuda_df.to_sql('deudas_sbs', db_engine, if_exists='replace', index=False)
 
-    print('==> (LOAD) Los datos fueron cargados satisfactoriamente')
+    print(
+        '==> (LOAD) Los datos fueron cargados satisfactoriamente en la tabla deudas_sbs'
+    )
 
 
 # Llamar a las funciones definidas EXTRACT, TRANSFORM y LOAD
 if __name__ == "__main__":
 
     # Extracción
-    data = extract()
+    df = extract()
 
     # Transformación
-    cliente_df, deuda_df = transform(data)
+    deuda_df = transform_deuda(df)
+    cliente_df = transform_cliente(df)
 
     # Carga
-    load(cliente_df, deuda_df)
+    load_deuda(deuda_df)
+    load_cliente(cliente_df)
